@@ -35,24 +35,21 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest registerRequest) {
         try {
-            log.info("Attempting to register user: {}", registerRequest.getUsername());
-
             User user = new User();
             user.setUsername(registerRequest.getUsername());
             user.setEmail(registerRequest.getEmail());
+            user.setPassword(registerRequest.getPassword());
 
             User registeredUser = authService.registerUser(user);
-            String token = jwtUtils.generateToken(registeredUser);
 
-            log.info("User registered successfully: {}", registeredUser.getUsername());
-
-            return ResponseEntity.ok(
-                    new AuthResponse(
-                            token,
-                            "Registration successful",
-                            registeredUser.getUsername()
-                    )
-            );
+            try {
+                String token = jwtUtils.generateToken(registeredUser);
+                return ResponseEntity.ok(new AuthResponse(token, "Registration successful", registeredUser.getUsername()));
+            } catch (Exception e) {
+                log.error("JWT generation failed for user {}: {}", registeredUser.getUsername(), e.getMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(new AuthResponse(null, "Registration partially successful but token generation failed", registeredUser.getUsername()));
+            }
         } catch (Exception e) {
             log.error("Registration error for user {}: {}", registerRequest.getUsername(), e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -62,10 +59,11 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        log.info("Incoming login data - email: {}, password: [PROTECTED]", request.getEmail());
         try {
-            log.info("Login attempt for user: {}", request.getUsername());
+            log.info("Login attempt for user: {}", request.getEmail());
 
-            User user = authService.authenticateUser(request.getUsername(), request.getPassword());
+            User user = authService.authenticateUser(request.getEmail(), request.getPassword());
             String token = jwtUtils.generateToken(user);
 
             log.info("User logged in successfully: {}", user.getUsername());
@@ -78,7 +76,7 @@ public class AuthController {
                     )
             );
         } catch (UsernameNotFoundException | IllegalArgumentException e) {
-            log.warn("Login failed for user {}: {}", request.getUsername(), e.getMessage());
+            log.warn("Login failed for user {}: {}", request.getEmail(), e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new AuthResponse(null, e.getMessage(), null));
         }
