@@ -87,4 +87,6 @@ public class AuthController {
         log.debug("Test endpoint accessed");
         return ResponseEntity.ok("{\"status\":\"API работает!\"}");
     }
+
+
 }

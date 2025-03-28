@@ -25,15 +25,19 @@ public class AuthService {
 
     @Transactional
     public User registerUser(User user) {
-        // Проверка на существующего пользователя
-        if (userRepository.existsByUsername(user.getUsername())) {
-            throw new IllegalArgumentException("Username already exists");
-        }
-        if (userRepository.existsByEmail(user.getEmail())) {
-            throw new IllegalArgumentException("Email already in use");
+        log.info("Attempting to register user: {}", user.getEmail());
+        if (user.getEmail() == null || user.getUsername() == null) {
+            throw new IllegalArgumentException("Email and username cannot be null");
         }
 
-        user.setPassword(passwordEncoder.encode(user.getPassword())); // Хешируем здесь
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new IllegalArgumentException("Username '" + user.getUsername() + "' already exists");
+        }
+        if (userRepository.existsByEmail(user.getEmail())) {
+            throw new IllegalArgumentException("Email '" + user.getEmail() + "' already in use");
+        }
+
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
     }
 
