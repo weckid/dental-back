@@ -3,11 +3,13 @@ package com.rxclinic.config;
 import com.rxclinic.util.JwtUtils;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -18,13 +20,14 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-
 @Component
 @RequiredArgsConstructor
 public class JwtTokenFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenFilter.class);
+    private static final String JWT_COOKIE_NAME = "jwt_token";
 
     private final JwtUtils jwtUtils;
+    @Qualifier("userDetailsServiceImpl")
     private final UserDetailsService userDetailsService;
 
     @Override
@@ -32,38 +35,47 @@ public class JwtTokenFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         try {
-            String jwt = parseJwt(request);
+            String jwt = getJwtFromCookie(request);
 
-            if (jwt != null) {
-                if (jwtUtils.validateTokenSignature(jwt)) {
-                    String username = jwtUtils.getUsernameFromToken(jwt);
+            if (jwt == null) {
+                jwt = parseJwt(request); // Для обратной совместимости с заголовком
+            }
 
-                    if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            if (jwt != null && jwtUtils.validateTokenSignature(jwt)) {
+                String username = jwtUtils.getUsernameFromToken(jwt);
 
-                        if (jwtUtils.validateToken(jwt, userDetails)) {
-                            UsernamePasswordAuthenticationToken authentication =
-                                    new UsernamePasswordAuthenticationToken(
-                                            userDetails,
-                                            null,
-                                            userDetails.getAuthorities());
+                if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-                            authentication.setDetails(
-                                    new WebAuthenticationDetailsSource().buildDetails(request));
+                    if (jwtUtils.validateToken(jwt, userDetails)) {
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(
+                                        userDetails,
+                                        null,
+                                        userDetails.getAuthorities());
 
-                            SecurityContextHolder.getContext().setAuthentication(authentication);
-                            logger.debug("Authenticated user: {}", username);
-                        }
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
                     }
                 }
             }
         } catch (Exception e) {
-            logger.error("Authentication error", e); // Исправлено здесь
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication failed");
-            return;
+            logger.error("Cannot set user authentication: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String getJwtFromCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (JWT_COOKIE_NAME.equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        return null;
     }
 
     private String parseJwt(HttpServletRequest request) {
