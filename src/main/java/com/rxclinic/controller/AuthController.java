@@ -3,6 +3,7 @@ package com.rxclinic.controller;
 import com.rxclinic.DTO.AuthResponse;
 import com.rxclinic.DTO.LoginRequest;
 import com.rxclinic.DTO.RegisterRequest;
+import com.rxclinic.DTO.UpdateProfileRequest;
 import com.rxclinic.model.User;
 import com.rxclinic.service.AuthService;
 import com.rxclinic.util.JwtUtils;
@@ -17,8 +18,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.File;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -30,11 +35,13 @@ public class AuthController {
     private static final int COOKIE_MAX_AGE = 86400;
     private final AuthService authService;
     private final JwtUtils jwtUtils;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    public AuthController(AuthService authService, JwtUtils jwtUtils) {
+    public AuthController(AuthService authService, JwtUtils jwtUtils, PasswordEncoder passwordEncoder) {
         this.authService = authService;
         this.jwtUtils = jwtUtils;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping("/register")
@@ -43,7 +50,7 @@ public class AuthController {
             User user = new User();
             user.setUsername(registerRequest.getUsername());
             user.setEmail(registerRequest.getEmail());
-            user.setPassword(registerRequest.getPassword());
+            user.setPassword(passwordEncoder.encode(registerRequest.getPassword())); // Используем PasswordEncoder
 
             User registeredUser = authService.registerUser(user);
 
@@ -69,7 +76,6 @@ public class AuthController {
             User user = authService.authenticateUser(request.getEmail(), request.getPassword());
             String token = jwtUtils.generateToken(user);
 
-            // Создаем HTTP-only куку
             ResponseCookie cookie = ResponseCookie.from(JWT_COOKIE_NAME, token)
                     .httpOnly(true)
                     .secure(false) // true в production
@@ -78,11 +84,10 @@ public class AuthController {
                     .sameSite("Lax")
                     .build();
 
-            // Возвращаем ответ с кукой в заголовке
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, cookie.toString())
                     .body(new AuthResponse(
-                            null, // Токен теперь только в куках
+                            null,
                             "Login successful",
                             user.getUsername()
                     ));
@@ -97,6 +102,7 @@ public class AuthController {
         log.debug("Test endpoint accessed");
         return ResponseEntity.ok("{\"status\":\"API работает!\"}");
     }
+
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletResponse response) {
         clearJwtCookie(response);
@@ -132,9 +138,110 @@ public class AuthController {
         String username = jwtUtils.getUsernameFromToken(token);
         return ResponseEntity.ok(new AuthResponse(null, "Authenticated", username));
     }
+
     @GetMapping("/csrf")
     public ResponseEntity<?> getCsrfToken(HttpServletRequest request) {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/profile")
+    public ResponseEntity<?> getProfile(@CookieValue(name = "jwt_token", required = false) String token) {
+        if (token == null || !jwtUtils.validateTokenSignature(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthResponse(null, "Not authenticated", null));
+        }
+        String username = jwtUtils.getUsernameFromToken(token);
+        User user = authService.getUserByUsername(username);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        return ResponseEntity.ok(new AuthResponse(
+                null,
+                "Profile data",
+                user.getUsername(),
+                user.getEmail(),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getPhone(),
+                user.getPhotoUrl()
+        ));
+    }
+
+    @PatchMapping("/profile")
+    public ResponseEntity<?> updateProfile(
+            @CookieValue(name = "jwt_token", required = false) String token,
+            @RequestPart(required = false) String login,
+            @RequestPart(required = false) String email,
+            @RequestPart(required = false) String firstName,
+            @RequestPart(required = false) String lastName,
+            @RequestPart(required = false) String phone,
+            @RequestPart(required = false) MultipartFile photo,
+            @RequestPart(required = false) String oldPassword,
+            @RequestPart(required = false) String newPassword
+    ) {
+        if (token == null || !jwtUtils.validateTokenSignature(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthResponse(null, "Not authenticated", null));
+        }
+        String username = jwtUtils.getUsernameFromToken(token);
+        User user = authService.getUserByUsername(username);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        // Обновляем только переданные поля
+        if (login != null && !login.isBlank()) {
+            user.setUsername(login);
+        }
+        if (email != null && !email.isBlank()) {
+            user.setEmail(email);
+        }
+        if (firstName != null) {
+            user.setFirstName(firstName);
+        }
+        if (lastName != null) {
+            user.setLastName(lastName);
+        }
+        if (phone != null) {
+            user.setPhone(phone);
+        }
+        if (photo != null && !photo.isEmpty()) {
+            try {
+                // Сохранение файла и получение URL (пример, адаптируйте под вашу логику)
+                String photoUrl = savePhoto(photo);
+                user.setPhotoUrl(photoUrl);
+            } catch (IOException e) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(new AuthResponse(null, "Ошибка при загрузке фото", null));
+            }
+        }
+
+        // Обновление пароля
+        if (newPassword != null && !newPassword.isBlank()) {
+            if (oldPassword == null || !passwordEncoder.matches(oldPassword, user.getPassword())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new AuthResponse(null, "Old password is incorrect or missing", null));
+            }
+            user.setPassword(passwordEncoder.encode(newPassword));
+        }
+
+        authService.saveUser(user);
+        return ResponseEntity.ok(new AuthResponse(
+                null,
+                "Profile updated",
+                user.getUsername(),
+                user.getEmail(),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getPhone(),
+                user.getPhotoUrl()
+        ));
+    }
+    private String savePhoto(MultipartFile photo) throws IOException {
+        String uploadDir = "/path/to/upload/directory/"; // Укажите путь для сохранения
+        String fileName = System.currentTimeMillis() + "_" + photo.getOriginalFilename();
+        File destination = new File(uploadDir + fileName);
+        photo.transferTo(destination);
+        return "http://localhost:8080/uploads/" + fileName; // Возвращаем URL
+    }
 }

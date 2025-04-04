@@ -8,7 +8,7 @@ import java.util.Set;
 
 @Data
 @Entity
-@Table(name = "users") // Указываем явное имя таблицы
+@Table(name = "users")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,6 +22,18 @@ public class User {
 
     @Column(unique = true, nullable = false)
     private String email;
+
+    @Column
+    private String firstName; // Имя
+
+    @Column
+    private String lastName;  // Фамилия
+
+    @Column
+    private String phone;     // Номер телефона
+
+    @Column
+    private String photoUrl;  // URL фотографии
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

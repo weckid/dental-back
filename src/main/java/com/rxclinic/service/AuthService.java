@@ -62,4 +62,11 @@ public class AuthService {
         log.info("Authentication successful for user: {}", user.getUsername());
         return user;
     }
+    public User getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+    }
+    public void saveUser(User user) {
+        userRepository.save(user);
+    }
 }

@@ -34,7 +34,6 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf().disable()
                 .cors().configurationSource(corsConfigurationSource()).and()
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
@@ -42,17 +41,16 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/**",
+                                "/api/auth/**", // /login, /logout, /check, /profile и т.д.
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/error",
-                                "/favicon.ico",
-                                "/api/Profile"
+                                "/favicon.ico"
                         ).permitAll()
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN") // Защищенные endpoints для ADMIN
-                        .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN") // Доступ для USER и ADMIN
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
+                        .anyRequest().authenticated() // Все остальные запросы требуют авторизации
                 )
                 .exceptionHandling()
                 .accessDeniedHandler(accessDeniedHandler())
