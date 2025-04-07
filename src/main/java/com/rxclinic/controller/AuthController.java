@@ -50,7 +50,7 @@ public class AuthController {
             User user = new User();
             user.setUsername(registerRequest.getUsername());
             user.setEmail(registerRequest.getEmail());
-            user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
+            user.setPassword(registerRequest.getPassword()); // Передаём пароль как есть, без хеширования
 
             User registeredUser = authService.registerUser(user);
             String token = jwtUtils.generateToken(registeredUser);
@@ -63,16 +63,18 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         try {
             User user = authService.authenticateUser(request.getEmail(), request.getPassword());
             String token = jwtUtils.generateToken(user);
+            setJwtCookie(response, token); // Устанавливаем cookie
             return ResponseEntity.ok(new AuthResponse(token, "Login successful", user.getUsername()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new AuthResponse(null, e.getMessage(), null));
         }
     }
+
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
@@ -82,13 +84,13 @@ public class AuthController {
     private void setJwtCookie(HttpServletResponse response, String token) {
         ResponseCookie cookie = ResponseCookie.from(JWT_COOKIE_NAME, token)
                 .httpOnly(true)
-                .secure(false)
+                .secure(false) // Установите true для HTTPS в продакшене
                 .path("/")
                 .maxAge(COOKIE_MAX_AGE)
                 .sameSite("Lax")
                 .build();
-
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        log.info("Cookie set: jwt_token={}", token); // Добавьте лог для отладки
     }
 
     private void clearJwtCookie(HttpServletResponse response) {
@@ -115,10 +117,15 @@ public class AuthController {
     }
 
     @GetMapping("/profile")
-    public ResponseEntity<?> getProfile(@CookieValue(name = "jwt_token", required = false) String token) {
-        if (token == null || !jwtUtils.validateTokenSignature(token)) {
+    public ResponseEntity<?> getProfile(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new AuthResponse(null, "Not authenticated", null));
+        }
+        String token = authHeader.substring(7); // Убираем "Bearer "
+        if (!jwtUtils.validateTokenSignature(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthResponse(null, "Invalid token", null));
         }
         String username = jwtUtils.getUsernameFromToken(token);
         User user = authService.getUserByUsername(username);
@@ -126,14 +133,8 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
         return ResponseEntity.ok(new AuthResponse(
-                null,
-                "Profile data",
-                user.getUsername(),
-                user.getEmail(),
-                user.getFirstName(),
-                user.getLastName(),
-                user.getPhone(),
-                user.getPhotoUrl()
+                null, "Profile data", user.getUsername(), user.getEmail(),
+                user.getFirstName(), user.getLastName(), user.getPhone(), user.getPhotoUrl()
         ));
     }
 

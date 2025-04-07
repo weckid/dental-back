@@ -48,7 +48,7 @@ public class AuthService {
         Role userRole = roleRepository.findByName("ROLE_USER")
                 .orElseThrow(() -> new RuntimeException("ROLE_USER not found"));
         user.setRoles(Collections.singleton(userRole));
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setPassword(passwordEncoder.encode(user.getPassword())); // Хешируем здесь один раз
         return userRepository.save(user);
     }
 
