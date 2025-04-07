@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 public class JwtUtils {
@@ -33,8 +36,15 @@ public class JwtUtils {
     }
 
     public String generateToken(User user) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", user.getRoles().stream()
+                .map(role -> role.getName())
+                .collect(Collectors.toList())); // Добавляем роли в токен
+        claims.put("sub", user.getUsername());
+        claims.put("email", user.getEmail());
+
         return Jwts.builder()
-                .setSubject(user.getUsername())
+                .setClaims(claims)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
                 .signWith(signingKey, SignatureAlgorithm.HS256)
@@ -116,4 +126,13 @@ public class JwtUtils {
         }
     }
 
+    // Добавляем метод для получения ролей из токена (опционально, если нужно на backend)
+    public java.util.List<String> getRolesFromToken(String token) {
+        Claims claims = Jwts.parserBuilder()
+                .setSigningKey(signingKey)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+        return claims.get("roles", java.util.List.class);
+    }
 }
