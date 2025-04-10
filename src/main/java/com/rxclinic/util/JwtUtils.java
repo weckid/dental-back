@@ -39,7 +39,7 @@ public class JwtUtils {
         Map<String, Object> claims = new HashMap<>();
         claims.put("roles", user.getRoles().stream()
                 .map(role -> role.getName())
-                .collect(Collectors.toList())); // Добавляем роли в токен
+                .collect(Collectors.toList()));
         claims.put("sub", user.getUsername());
         claims.put("email", user.getEmail());
 

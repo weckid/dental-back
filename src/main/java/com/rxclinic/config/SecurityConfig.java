@@ -33,22 +33,22 @@ public class SecurityConfig {
                 .cors().configurationSource(corsConfigurationSource()).and()
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .ignoringRequestMatchers("/api/auth/**")
+                        .ignoringRequestMatchers("/api/auth/**", "/api/admin/**") // Отключаем CSRF для admin
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/**", // /login, /logout, /check, /profile и т.д.
+                                "/api/auth/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/error",
                                 "/favicon.ico",
-                                "/api/cards",      // Добавляем публичный доступ к карточкам
-                                "/api/categories"  // Добавляем публичный доступ к категориям
+                                "/api/cards",
+                                "/api/categories"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
-                        .anyRequest().authenticated() // Все остальные запросы требуют авторизации
+                        .anyRequest().authenticated()
                 )
                 .exceptionHandling()
                 .accessDeniedHandler(accessDeniedHandler())
@@ -71,7 +71,7 @@ public class SecurityConfig {
         config.setAllowedMethods(Arrays.asList("*"));
         config.setAllowedHeaders(Arrays.asList("*"));
         config.setExposedHeaders(Arrays.asList("Set-Cookie", "Authorization"));
-        config.setAllowCredentials(true); // Критически важно!
+        config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

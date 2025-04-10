@@ -3,7 +3,6 @@ package com.rxclinic.controller;
 import com.rxclinic.DTO.AuthResponse;
 import com.rxclinic.DTO.LoginRequest;
 import com.rxclinic.DTO.RegisterRequest;
-import com.rxclinic.DTO.UpdateProfileRequest;
 import com.rxclinic.model.User;
 import com.rxclinic.service.AuthService;
 import com.rxclinic.util.JwtUtils;
@@ -24,11 +23,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000"},
-        allowCredentials = "true")
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000"}, allowCredentials = "true")
 public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private static final String JWT_COOKIE_NAME = "jwt_token";
@@ -50,7 +50,7 @@ public class AuthController {
             User user = new User();
             user.setUsername(registerRequest.getUsername());
             user.setEmail(registerRequest.getEmail());
-            user.setPassword(registerRequest.getPassword()); // Передаём пароль как есть, без хеширования
+            user.setPassword(registerRequest.getPassword()); // Пароль будет захеширован в AuthService
 
             User registeredUser = authService.registerUser(user);
             String token = jwtUtils.generateToken(registeredUser);
@@ -67,7 +67,7 @@ public class AuthController {
         try {
             User user = authService.authenticateUser(request.getEmail(), request.getPassword());
             String token = jwtUtils.generateToken(user);
-            setJwtCookie(response, token); // Устанавливаем cookie
+            setJwtCookie(response, token);
             return ResponseEntity.ok(new AuthResponse(token, "Login successful", user.getUsername()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -75,9 +75,9 @@ public class AuthController {
         }
     }
 
-
     @PostMapping("/logout")
-    public ResponseEntity<?> logout() {
+    public ResponseEntity<?> logout(HttpServletResponse response) {
+        clearJwtCookie(response);
         return ResponseEntity.ok(new AuthResponse(null, "Logout successful", null));
     }
 
@@ -90,16 +90,18 @@ public class AuthController {
                 .sameSite("Lax")
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-        log.info("Cookie set: jwt_token={}", token); // Добавьте лог для отладки
+        log.info("Cookie set: jwt_token={}", token);
     }
 
     private void clearJwtCookie(HttpServletResponse response) {
-        Cookie cookie = new Cookie(JWT_COOKIE_NAME, null);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(false);
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        response.addCookie(cookie);
+        ResponseCookie cookie = ResponseCookie.from(JWT_COOKIE_NAME, null)
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(0)
+                .sameSite("Lax")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 
     @GetMapping("/check")
@@ -122,7 +124,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new AuthResponse(null, "Not authenticated", null));
         }
-        String token = authHeader.substring(7); // Убираем "Bearer "
+        String token = authHeader.substring(7);
         if (!jwtUtils.validateTokenSignature(token)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new AuthResponse(null, "Invalid token", null));
@@ -178,12 +180,12 @@ public class AuthController {
         }
         if (photo != null && !photo.isEmpty()) {
             try {
-                // Сохранение файла и получение URL (пример, адаптируйте под вашу логику)
                 String photoUrl = savePhoto(photo);
                 user.setPhotoUrl(photoUrl);
             } catch (IOException e) {
+                log.error("Failed to save photo: {}", e.getMessage(), e);
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body(new AuthResponse(null, "Ошибка при загрузке фото", null));
+                        .body(new AuthResponse(null, "Ошибка при загрузке фото: " + e.getMessage(), null));
             }
         }
 
@@ -198,21 +200,45 @@ public class AuthController {
 
         authService.saveUser(user);
         return ResponseEntity.ok(new AuthResponse(
-                null,
-                "Profile updated",
-                user.getUsername(),
-                user.getEmail(),
-                user.getFirstName(),
-                user.getLastName(),
-                user.getPhone(),
-                user.getPhotoUrl()
+                null, "Profile updated", user.getUsername(), user.getEmail(),
+                user.getFirstName(), user.getLastName(), user.getPhone(), user.getPhotoUrl()
         ));
     }
+
     private String savePhoto(MultipartFile photo) throws IOException {
-        String uploadDir = "/path/to/upload/directory/"; // Укажите путь для сохранения
+        // Используем корень проекта для сохранения файлов
+        String uploadDirPath = System.getProperty("user.dir") + File.separator + "uploads";
+        File uploadDir = new File(uploadDirPath);
+
+        // Создаём директорию, если её нет
+        if (!uploadDir.exists()) {
+            log.info("Creating upload directory: {}", uploadDir.getAbsolutePath());
+            if (!uploadDir.mkdirs()) {
+                throw new IOException("Failed to create upload directory: " + uploadDir.getAbsolutePath());
+            }
+        }
+
+        // Проверяем права на запись
+        if (!uploadDir.canWrite()) {
+            log.error("Cannot write to directory: {}", uploadDir.getAbsolutePath());
+            throw new IOException("Directory is not writable: " + uploadDir.getAbsolutePath());
+        }
+
+        // Генерируем уникальное имя файла
         String fileName = System.currentTimeMillis() + "_" + photo.getOriginalFilename();
-        File destination = new File(uploadDir + fileName);
-        photo.transferTo(destination);
-        return "http://localhost:8080/uploads/" + fileName; // Возвращаем URL
+        File destination = new File(uploadDir, fileName);
+
+        log.info("Saving photo to: {}", destination.getAbsolutePath());
+
+        // Сохраняем файл
+        try {
+            Files.copy(photo.getInputStream(), destination.toPath());
+        } catch (IOException e) {
+            log.error("Error saving photo to {}: {}", destination.getAbsolutePath(), e.getMessage(), e);
+            throw e;
+        }
+
+        // Возвращаем относительный URL
+        return "/uploads/" + fileName;
     }
 }
