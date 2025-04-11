@@ -19,6 +19,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 
+import static org.springframework.http.HttpMethod.GET;
+
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -33,7 +35,7 @@ public class SecurityConfig {
                 .cors().configurationSource(corsConfigurationSource()).and()
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .ignoringRequestMatchers("/api/auth/**", "/api/admin/**") // Отключаем CSRF для admin
+                        .ignoringRequestMatchers("/api/auth/**", "/api/cards/**") // Отключаем CSRF для cards
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -42,10 +44,10 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/error",
-                                "/favicon.ico",
-                                "/api/cards",
-                                "/api/categories"
+                                "/favicon.ico"
                         ).permitAll()
+                        .requestMatchers(GET, "/api/cards", "/api/categories").permitAll() // Только GET общедоступен
+                        .requestMatchers("/api/cards/**").hasRole("ADMIN") // Все операции с cards для ADMIN
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().authenticated()

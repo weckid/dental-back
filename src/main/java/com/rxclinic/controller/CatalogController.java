@@ -8,7 +8,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -33,6 +36,7 @@ public class CatalogController {
         }
         return cardRepository.findByCategoryCode(category);
     }
+
     @DeleteMapping("/cards/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteCard(@PathVariable Long id) {
@@ -57,11 +61,51 @@ public class CatalogController {
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
+
     @GetMapping("/cards/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Card> getCardById(@PathVariable Long id) {
         return cardRepository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/cards")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Card> createCard(
+            @RequestPart("title") String title,
+            @RequestPart("description") String description,
+            @RequestPart("price") String price,
+            @RequestPart("image") MultipartFile image,
+            @RequestPart("categoryCode") String categoryCode) throws IOException {
+        String fileName = image.getOriginalFilename();
+        if (fileName == null || !isImageFile(fileName)) {
+            return ResponseEntity.badRequest().body(null);
+        }
+
+        Card newCard = new Card();
+        newCard.setTitle(title);
+        newCard.setDescription(description);
+        newCard.setPrice(price);
+        newCard.setCategoryCode(categoryCode);
+
+        String uploadDir = System.getProperty("user.dir") + "/uploads/cards/";
+        File dir = new File(uploadDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        String uniqueFileName = System.currentTimeMillis() + "_" + fileName;
+        File destination = new File(dir, uniqueFileName);
+        image.transferTo(destination);
+        newCard.setImage("/uploads/cards/" + uniqueFileName);
+
+        Card savedCard = cardRepository.save(newCard);
+        return ResponseEntity.ok(savedCard);
+    }
+
+    private boolean isImageFile(String fileName) {
+        String[] allowedExtensions = {".jpg", ".jpeg", ".png"};
+        return List.of(allowedExtensions).stream()
+                .anyMatch(fileName.toLowerCase()::endsWith);
     }
 }

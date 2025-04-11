@@ -1,6 +1,8 @@
 package com.rxclinic.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -8,6 +10,7 @@ import jakarta.persistence.Table;
 @Table(name = "cards")
 public class Card {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY) // Автоинкремент для id
     private Long id;
     private String categoryCode;
     private String image;
