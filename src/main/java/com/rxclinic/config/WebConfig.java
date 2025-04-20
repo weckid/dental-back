@@ -19,7 +19,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String uploadDir = "file:/home/stud/Рабочий стол/dental-back-main/Uploads/";
+        String uploadDir = "file:./Uploads/";
         registry.addResourceHandler("/Uploads/**")
                 .addResourceLocations(uploadDir)
                 .setCachePeriod(0);

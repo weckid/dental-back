@@ -50,8 +50,7 @@ public class AuthController {
             User user = new User();
             user.setUsername(registerRequest.getUsername());
             user.setEmail(registerRequest.getEmail());
-            user.setPassword(registerRequest.getPassword()); // Пароль будет захеширован в AuthService
-
+            user.setPassword(registerRequest.getPassword());
             User registeredUser = authService.registerUser(user);
             String token = jwtUtils.generateToken(registeredUser);
             return ResponseEntity.ok(new AuthResponse(token, "Registration successful", registeredUser.getUsername()));
@@ -84,7 +83,7 @@ public class AuthController {
     private void setJwtCookie(HttpServletResponse response, String token) {
         ResponseCookie cookie = ResponseCookie.from(JWT_COOKIE_NAME, token)
                 .httpOnly(true)
-                .secure(false) // Установите true для HTTPS в продакшене
+                .secure(false)
                 .path("/")
                 .maxAge(COOKIE_MAX_AGE)
                 .sameSite("Lax")
@@ -162,7 +161,6 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-        // Обновляем только переданные поля
         if (login != null && !login.isBlank()) {
             user.setUsername(login);
         }
@@ -189,7 +187,6 @@ public class AuthController {
             }
         }
 
-        // Обновление пароля
         if (newPassword != null && !newPassword.isBlank()) {
             if (oldPassword == null || !passwordEncoder.matches(oldPassword, user.getPassword())) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -206,11 +203,9 @@ public class AuthController {
     }
 
     private String savePhoto(MultipartFile photo) throws IOException {
-        // Используем корень проекта для сохранения файлов
-        String uploadDirPath = System.getProperty("user.dir") + File.separator + "uploads";
+        String uploadDirPath = System.getProperty("user.dir") + File.separator + "Uploads";
         File uploadDir = new File(uploadDirPath);
 
-        // Создаём директорию, если её нет
         if (!uploadDir.exists()) {
             log.info("Creating upload directory: {}", uploadDir.getAbsolutePath());
             if (!uploadDir.mkdirs()) {
@@ -218,19 +213,19 @@ public class AuthController {
             }
         }
 
-        // Проверяем права на запись
         if (!uploadDir.canWrite()) {
             log.error("Cannot write to directory: {}", uploadDir.getAbsolutePath());
             throw new IOException("Directory is not writable: " + uploadDir.getAbsolutePath());
         }
 
-        // Генерируем уникальное имя файла
-        String fileName = System.currentTimeMillis() + "_" + photo.getOriginalFilename();
+        // Очистка имени файла
+        String originalFileName = photo.getOriginalFilename();
+        String cleanFileName = originalFileName != null ? originalFileName.replaceAll("[^a-zA-Z0-9.-]", "_") : "photo.jpg";
+        String fileName = System.currentTimeMillis() + "_" + cleanFileName;
         File destination = new File(uploadDir, fileName);
 
         log.info("Saving photo to: {}", destination.getAbsolutePath());
 
-        // Сохраняем файл
         try {
             Files.copy(photo.getInputStream(), destination.toPath());
         } catch (IOException e) {
@@ -238,7 +233,6 @@ public class AuthController {
             throw e;
         }
 
-        // Возвращаем относительный URL
         return "/uploads/" + fileName;
     }
 }
