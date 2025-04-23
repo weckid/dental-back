@@ -35,7 +35,14 @@ public class SecurityConfig {
                 .cors().configurationSource(corsConfigurationSource()).and()
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .ignoringRequestMatchers("/api/auth/**", "/api/cards/**", "/api/categories/**", "/api/admin/**", "/api/csrf")
+                        .ignoringRequestMatchers(
+                                "/api/auth/**",
+                                "/api/cards/**",
+                                "/api/categories/**",
+                                "/api/admin/**",
+                                "/api/appointments/**", // Добавлено явно
+                                "/api/csrf"
+                        )
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -46,13 +53,14 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/error",
                                 "/favicon.ico",
-                                "/uploads/**"
+                                "/Uploads/**"
                         ).permitAll()
                         .requestMatchers(GET, "/api/cards", "/api/categories").permitAll()
                         .requestMatchers("/api/cards/**").hasRole("ADMIN")
                         .requestMatchers("/api/categories/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/api/appointments/**").hasAnyRole("USER", "ADMIN", "DOCTOR")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling()

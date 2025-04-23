@@ -31,7 +31,6 @@ public class CatalogController {
     @Autowired
     private CardRepository cardRepository;
 
-    private final String IMAGE_BASE_URL = "http://localhost:8080";
     private final String UPLOAD_DIR = System.getProperty("user.dir") + "/Uploads/cards/";
 
     @GetMapping("/categories")
@@ -126,6 +125,12 @@ public class CatalogController {
             // Валидация цены
             Double.parseDouble(price);
 
+            // Валидация categoryCode
+            if (!categoryRepository.existsById(categoryCode)) {
+                log.warn("Category with code {} not found", categoryCode);
+                return ResponseEntity.badRequest().body(null);
+            }
+
             // Проверка изображения
             if (image != null && !image.isEmpty()) {
                 String fileName = image.getOriginalFilename();
@@ -189,8 +194,7 @@ public class CatalogController {
             @RequestPart(value = "description", required = false) String description,
             @RequestPart(value = "price", required = false) String price,
             @RequestPart(value = "categoryCode", required = false) String categoryCode,
-            @RequestPart(value = "image", required = false) MultipartFile image
-    ) {
+            @RequestPart(value = "image", required = false) MultipartFile image) {
         log.info("Updating card with id: {}", id);
         try {
             return cardRepository.findById(id)
@@ -211,6 +215,10 @@ public class CatalogController {
                             }
                         }
                         if (categoryCode != null && !categoryCode.isBlank()) {
+                            if (!categoryRepository.existsById(categoryCode)) {
+                                log.warn("Category with code {} not found", categoryCode);
+                                throw new IllegalArgumentException("Category not found");
+                            }
                             card.setCategoryCode(categoryCode);
                         }
                         if (image != null && !image.isEmpty()) {
@@ -335,11 +343,14 @@ public class CatalogController {
                 .anyMatch(fileName.toLowerCase()::endsWith);
     }
 
-    private String getImagePath(String imageUrl) {
-        if (imageUrl != null && imageUrl.startsWith(IMAGE_BASE_URL)) {
-            String relativePath = imageUrl.substring(IMAGE_BASE_URL.length());
-            return UPLOAD_DIR + Paths.get(relativePath).getFileName().toString();
+    private String getImagePath(String image) {
+        if (image == null || image.isEmpty()) {
+            return "";
         }
-        return UPLOAD_DIR + Paths.get(imageUrl).getFileName().toString();
+        // Очищаем путь от возможного полного URL
+        String cleanedPath = image.replaceAll("^(http://localhost:8080)+", "");
+        // Извлекаем имя файла из пути
+        String fileName = Paths.get(cleanedPath).getFileName().toString();
+        return UPLOAD_DIR + fileName;
     }
 }

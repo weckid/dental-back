@@ -233,6 +233,6 @@ public class AuthController {
             throw e;
         }
 
-        return "/uploads/" + fileName;
+        return "/Uploads/" + fileName;
     }
 }
